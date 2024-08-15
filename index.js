@@ -1,5 +1,5 @@
 // @ts-check
-const { Client, GatewayIntentBits, SlashCommandBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField, ChannelType, ButtonStyle, ButtonBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, SlashCommandBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField, ChannelType, ButtonStyle, ButtonBuilder, EmbedBuilder } = require('discord.js');
 require('dotenv').config();
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
@@ -83,6 +83,7 @@ message.components.push(new ActionRowBuilder().setComponents(buttons));
 
 
 client.on('interactionCreate', async interaction => {
+    if(!interaction.guild) return;
     if (interaction.isCommand()) {
         if (interaction.commandName === 'panel') {
             // @ts-ignore as the options are not on the command type for whatever reason
@@ -106,13 +107,49 @@ client.on('interactionCreate', async interaction => {
                     repo: process.env.GITHUB_REPO,
                     body: interaction.fields.getTextInputValue('description'),
                     title: interaction.fields.getTextInputValue('title'),
-                    labels: ['suggestion']
+                    labels: [interaction.customId]
                 });
 
-                await interaction.reply(`Suggestion created succesfully: ${data.html_url}`);
+                if (settings.discord.enabled) {
+                    // @ts-ignore as the guild is guaranteed to be a guild
+                    const channel = await client.guilds.cache.get(interaction.guildId).channels.cache.find(channel => channel.type === ChannelType.GuildText && channel.name === settings.discord.channel);
+                    if (channel) {
+
+                        let channelMessage = { content: settings.discord.message.content.replace('$link', data.html_url) };
+                        settings.discord.message.embeds.forEach(embed => {
+                            channelMessage.embeds = channelMessage.embeds || [];
+
+                            channelMessage.embeds.push({
+                                title: embed.title.replace('$title', interaction.fields.getTextInputValue('title')),
+                                description: embed.description.replace('$description', interaction.fields.getTextInputValue('description')),
+                                // @ts-ignore as the type is applicable
+                                thumbnail: embed.thumbnail.replace('$userAvatar', interaction.user.avatarURL()),
+                                color: embed.color
+                            });
+                        })
+
+                        // @ts-ignore as the channel is guaranteed to be a text channel
+                        const message = await channel.send(channelMessage);
+
+                        if (settings.discord.voting) {
+                            await message.react('👍');
+                            await message.react('👎');
+                        }
+
+                        if (settings.discord.thread) {
+                            await message.startThread({
+                                name: interaction.fields.getTextInputValue('title'),
+                                autoArchiveDuration: 1440
+                            });
+                        }
+                    }
+                }
+
+
+                await interaction.reply({content:`Suggestion created succesfully: ${data.html_url}`,ephemeral: false});
             } catch (error) {
                 console.error(error.stack);
-                await interaction.reply('There was an error creating the GitHub issue.');
+                await interaction.reply({ content: `An unexpected error occurred: ${error.message}`, ephemeral: false });
             }
         }
     }
