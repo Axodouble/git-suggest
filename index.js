@@ -1,29 +1,40 @@
+// @ts-check
 const { Client, GatewayIntentBits, SlashCommandBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField, ChannelType, ButtonStyle, ButtonBuilder } = require('discord.js');
 require('dotenv').config();
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 const settings = require('./settings');
 
-client.once('ready', async () => {
-    console.log(`Logged in as ${client.user.tag}!`);
-    client.application.
+if (!process.env.DISCORD_TOKEN) {
+    console.error('No DISCORD_TOKEN provided');
+    process.exit(1);
+}
 
-        client.application.commands.create(new SlashCommandBuilder()
-            .setName('suggest')
-            .setDescription('Suggest a feature')
-        );
+if (!process.env.GITHUB_TOKEN) {
+    console.error('No GITHUB_TOKEN provided');
+    process.exit(1);
+}
+
+if (!process.env.GITHUB_OWNER) {
+    console.error('No GITHUB_OWNER provided');
+    process.exit(1);
+}
+
+if (!process.env.GITHUB_REPO) {
+    console.error('No GITHUB_REPO provided');
+    process.exit(1);
+}
+
+client.once('ready', async () => {
+    // @ts-ignore
+    console.log(`Logged in as ${client.user.tag}!`);
+    // @ts-ignore
     client.application.commands.create(new SlashCommandBuilder()
         .setName('panel')
         .setDescription('Show the panel')
         .setDMPermission(false)
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels)
-        .addChannelOption(option =>
-            option
-                .addChannelTypes(ChannelType.GuildText)
-                .setName('channel')
-                .setDescription('The channel to show the panel in')
-                .setRequired(false)
-        ))
+    )
 });
 
 // Construct panel message
@@ -73,9 +84,8 @@ message.components.push(new ActionRowBuilder().setComponents(buttons));
 
 client.on('interactionCreate', async interaction => {
     if (interaction.isCommand()) {
-        if (interaction.commandName === 'suggest') {
-            showSuggestionsModalOld(interaction);
-        } else if (interaction.commandName === 'panel') {
+        if (interaction.commandName === 'panel') {
+            // @ts-ignore as the options are not on the command type for whatever reason
             const channel = interaction.options.getChannel('channel') || interaction.channel;
             await channel.send(message);
 
@@ -83,7 +93,6 @@ client.on('interactionCreate', async interaction => {
     }
     if (interaction.isButton()) {
         showSuggestionsModal(interaction);
-
     }
     if (interaction.isModalSubmit()) {
         if (interaction.customId === 'suggestion') {
@@ -91,7 +100,9 @@ client.on('interactionCreate', async interaction => {
                 const { Octokit } = await import('@octokit/rest');
                 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
                 const { data } = await octokit.issues.create({
+                    // @ts-ignore already guaranteed to be a string
                     owner: process.env.GITHUB_OWNER,
+                    // @ts-ignore already guaranteed to be a string
                     repo: process.env.GITHUB_REPO,
                     body: interaction.fields.getTextInputValue('description'),
                     title: interaction.fields.getTextInputValue('title'),
@@ -109,10 +120,15 @@ client.on('interactionCreate', async interaction => {
 
 function showSuggestionsModal(interaction) {
     const category = settings.categories.find(category => category.github.label === interaction.customId);
+    if (!category) {
+        interaction.message.update(message);
+        return interaction.reply("Invalid category...");
+    }
     interaction.showModal(
         new ModalBuilder()
             .setTitle(category.button.label)
             .setCustomId(category.github.label)
+            // @ts-ignore as the types here are correct however not supported according to the types
             .setComponents([
                 new ActionRowBuilder().setComponents([
                     new TextInputBuilder()
@@ -126,34 +142,6 @@ function showSuggestionsModal(interaction) {
                     new TextInputBuilder()
                         .setLabel(category.description.label)
                         .setPlaceholder(category.description.placeholder)
-                        .setCustomId("description")
-                        .setRequired(true)
-                        .setStyle(TextInputStyle.Paragraph)
-                        .setMinLength(10)
-                        .setMaxLength(2000),
-                ]),
-            ])
-    )
-}
-
-function showSuggestionsModalOld(interaction) {
-    interaction.showModal(
-        new ModalBuilder()
-            .setTitle("Suggestions")
-            .setCustomId("suggestion")
-            .setComponents([
-                new ActionRowBuilder().setComponents([
-                    new TextInputBuilder()
-                        .setLabel("Title")
-                        .setPlaceholder("Enter the title of the suggestion")
-                        .setCustomId("title")
-                        .setRequired(true)
-                        .setStyle(TextInputStyle.Short),
-                ]),
-                new ActionRowBuilder().setComponents([
-                    new TextInputBuilder()
-                        .setLabel("Description")
-                        .setPlaceholder("Enter the description of the suggestion")
                         .setCustomId("description")
                         .setRequired(true)
                         .setStyle(TextInputStyle.Paragraph)

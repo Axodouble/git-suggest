@@ -3,10 +3,16 @@ module.exports = {
         content: null,
         embeds: [
             {
-                title: "Suggestion",
-                description: "Submit a suggestion",
+                title: "Suggestions, bugs, and feedback",
+                description: "Submit suggestions, bug reports or feedback using the buttons below.",
                 color: 0xffffff,
-                fields: []
+                fields: [
+                    {
+                        name: "Don't open questions.",
+                        value: "Try to keep your suggestions and bug reports clear and concise. If you have a question, please ask in the support server.",
+                        inline: false
+                    }
+                ]
             }
         ]
     },
