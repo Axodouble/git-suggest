@@ -1,7 +1,8 @@
-const { Client, GatewayIntentBits, SlashCommandBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { Client, GatewayIntentBits, SlashCommandBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField, ChannelType, ButtonStyle, ButtonBuilder } = require('discord.js');
 require('dotenv').config();
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const settings = require('./settings');
 
 client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}!`);
@@ -11,13 +12,78 @@ client.once('ready', async () => {
             .setName('suggest')
             .setDescription('Suggest a feature')
         );
+    client.application.commands.create(new SlashCommandBuilder()
+        .setName('panel')
+        .setDescription('Show the panel')
+        .setDMPermission(false)
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels)
+        .addChannelOption(option =>
+            option
+                .addChannelTypes(ChannelType.GuildText)
+                .setName('channel')
+                .setDescription('The channel to show the panel in')
+                .setRequired(false)
+        ))
 });
+
+// Construct panel message
+let message = { content: settings.panel.content }
+settings.panel.embeds.forEach(embed => {
+    message.embeds = message.embeds || [];
+    let fields = [];
+    embed.fields.forEach(field => {
+        field.inline = field.inline || false;
+        field.name = field.name || 'Field';
+        field.value = field.value || 'Value';
+    })
+
+    message.embeds.push({
+        title: embed.title,
+        description: embed.description,
+        color: embed.color,
+        fields: fields
+    });
+})
+
+let buttons = []
+
+settings.categories.forEach(category => {
+    message.components = message.components || [];
+
+    let buttonStyle = ButtonStyle.Secondary;
+    if (category.button.style === 'primary') {
+        buttonStyle = ButtonStyle.Primary;
+    } else if (category.button.style === 'success') {
+        buttonStyle = ButtonStyle.Success;
+    } else if (category.button.style === 'danger') {
+        buttonStyle = ButtonStyle.Danger;
+    }
+    if (buttons.length === 5) {
+        message.components.push(new ActionRowBuilder().setComponents(buttons));
+        buttons = [];
+    }
+
+    buttons.push(new ButtonBuilder()
+        .setLabel(category.button.label)
+        .setStyle(buttonStyle)
+        .setCustomId(category.github.label))
+})
+message.components.push(new ActionRowBuilder().setComponents(buttons));
+
 
 client.on('interactionCreate', async interaction => {
     if (interaction.isCommand()) {
         if (interaction.commandName === 'suggest') {
-            showSuggestionsModal(interaction);
+            showSuggestionsModalOld(interaction);
+        } else if (interaction.commandName === 'panel') {
+            const channel = interaction.options.getChannel('channel') || interaction.channel;
+            await channel.send(message);
+
         }
+    }
+    if (interaction.isButton()) {
+        showSuggestionsModal(interaction);
+
     }
     if (interaction.isModalSubmit()) {
         if (interaction.customId === 'suggestion') {
@@ -42,6 +108,35 @@ client.on('interactionCreate', async interaction => {
 });
 
 function showSuggestionsModal(interaction) {
+    const category = settings.categories.find(category => category.github.label === interaction.customId);
+    interaction.showModal(
+        new ModalBuilder()
+            .setTitle(category.button.label)
+            .setCustomId(category.github.label)
+            .setComponents([
+                new ActionRowBuilder().setComponents([
+                    new TextInputBuilder()
+                        .setLabel(category.title.label)
+                        .setPlaceholder(category.title.placeholder)
+                        .setCustomId("title")
+                        .setRequired(true)
+                        .setStyle(TextInputStyle.Short),
+                ]),
+                new ActionRowBuilder().setComponents([
+                    new TextInputBuilder()
+                        .setLabel(category.description.label)
+                        .setPlaceholder(category.description.placeholder)
+                        .setCustomId("description")
+                        .setRequired(true)
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setMinLength(10)
+                        .setMaxLength(2000),
+                ]),
+            ])
+    )
+}
+
+function showSuggestionsModalOld(interaction) {
     interaction.showModal(
         new ModalBuilder()
             .setTitle("Suggestions")
